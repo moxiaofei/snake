@@ -227,6 +227,7 @@
   if (isTouch) document.body.classList.add('touch');
   let size = 0;                        // 画布边长（CSS 像素）
   let maximized = false, sizeBeforeMax = 0, minimized = false, userSized = false;
+  let fsActive = false, fsPrevSize = 0;
 
   /* ---------- 窗口尺寸 ---------- */
   function isLandscape() {
@@ -257,7 +258,7 @@
   }
 
   function fitToViewport() {
-    if (maximized) { applySize(maxBoardSize()); return; }
+    if (maximized || fsActive) { applySize(maxBoardSize()); return; }
     if (!userSized) { applySize(Math.min(520, maxBoardSize())); return; }
     applySize(size);
   }
@@ -612,6 +613,18 @@
   function inFullscreen() {
     return !!fsElement() || document.body.classList.contains('fs');
   }
+  function syncFsLayout() {
+    const on = inFullscreen();
+    if (on === fsActive) return;
+    if (on) {
+      fsPrevSize = size;
+      fsActive = true;
+      applySize(maxBoardSize());
+    } else {
+      fsActive = false;
+      applySize(fsPrevSize || size);
+    }
+  }
   function toggleFullscreen() {
     const el = document.documentElement;
     if (fsElement()) {
@@ -625,7 +638,7 @@
     } else {
       document.body.classList.add('fs');
     }
-    setTimeout(fitToViewport, 80);
+    setTimeout(syncFsLayout, 80);
   }
   btnFs.addEventListener('click', toggleFullscreen);
 
@@ -694,8 +707,8 @@
 
   window.addEventListener('resize', fitToViewport);
   window.addEventListener('orientationchange', () => setTimeout(fitToViewport, 150));
-  document.addEventListener('fullscreenchange', fitToViewport);
-  document.addEventListener('webkitfullscreenchange', fitToViewport);
+  document.addEventListener('fullscreenchange', syncFsLayout);
+  document.addEventListener('webkitfullscreenchange', syncFsLayout);
 
   applySize(Math.min(520, maxBoardSize()));
   reset();
