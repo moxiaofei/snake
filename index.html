@@ -625,20 +625,33 @@
       applySize(fsPrevSize || size);
     }
   }
+  function useFsFallback() {
+    document.body.classList.add('fs');
+    syncFsLayout();
+  }
   function toggleFullscreen() {
     const el = document.documentElement;
-    if (fsElement()) {
-      (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
-    } else if (document.body.classList.contains('fs')) {
-      document.body.classList.remove('fs');
-    } else if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => document.body.classList.add('fs'));
-    } else if (el.webkitRequestFullscreen) {
-      el.webkitRequestFullscreen();
-    } else {
-      document.body.classList.add('fs');
+    if (inFullscreen()) {
+      if (fsElement()) {
+        (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
+      } else {
+        document.body.classList.remove('fs');
+      }
+      syncFsLayout();
+      return;
     }
-    setTimeout(syncFsLayout, 80);
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(syncFsLayout).catch(useFsFallback);
+    } else if (el.webkitRequestFullscreen) {
+      try {
+        el.webkitRequestFullscreen();
+        syncFsLayout();
+      } catch (err) {
+        useFsFallback();
+      }
+    } else {
+      useFsFallback();
+    }
   }
   btnFs.addEventListener('click', toggleFullscreen);
 
@@ -709,6 +722,7 @@
   window.addEventListener('orientationchange', () => setTimeout(fitToViewport, 150));
   document.addEventListener('fullscreenchange', syncFsLayout);
   document.addEventListener('webkitfullscreenchange', syncFsLayout);
+  document.addEventListener('fullscreenerror', useFsFallback);
 
   applySize(Math.min(520, maxBoardSize()));
   reset();
