@@ -116,26 +116,22 @@
   .dpad button:active{transform:scale(.94);background:rgba(94,242,192,.16)}
   .dpad .up{grid-area:up}.dpad .down{grid-area:down}
   .dpad .left{grid-area:left}.dpad .right{grid-area:right}
-  .fs-only{display:none}
   .hint-touch{display:none}
-  .winbtns .fs-only{display:none}
+  .winbtns .fs-only{display:flex}
   .winbtns .min-only{display:flex}
   body.fs{position:fixed;inset:0;padding:0;overflow:hidden;background:#05080f}
   body.fs .app{height:100%;gap:8px;justify-content:center}
-  @media (hover:none) and (pointer:coarse){
-    .dpad{display:grid}
-    .winbtns .fs-only{display:flex}
-    .winbtns .min-only{display:none}
-    .titlebar{gap:8px;padding:0 6px 0 10px}
-    .hint-desktop{display:none}
-    .hint-touch{display:block}
-  }
+  .touch .dpad{display:grid}
+  .touch .winbtns .min-only{display:none}
+  .touch .titlebar{gap:8px;padding:0 6px 0 10px}
+  .touch .hint-desktop{display:none}
+  .touch .hint-touch{display:block}
   /* 手机横屏：窗口与方向键并排，按高度自适应 */
-  @media (pointer:coarse) and (orientation:landscape) and (max-height:600px){
-    body{padding:6px 10px}
-    .app{flex-direction:row;justify-content:center;gap:16px}
-    .hint{display:none}
-    .dpad{margin-top:0;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,50px)}
+  @media (orientation:landscape) and (max-height:600px){
+    body.touch{padding:6px 10px}
+    body.touch .app{flex-direction:row;justify-content:center;gap:16px}
+    body.touch .hint{display:none}
+    body.touch .dpad{margin-top:0;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,50px)}
   }
   @media (max-width:420px){ .hint{font-size:11px} .title{font-size:11px} }
 </style>
@@ -180,7 +176,7 @@
 
   <div class="hint hint-desktop">
     <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> / <kbd>WASD</kbd> 移动 ·
-    <kbd>空格</kbd> 暂停 · 鼠标单击转向 · 拖动四角/边缘缩放
+    <kbd>空格</kbd> 暂停 · 鼠标单击/拖拽转向 · 右上角 ⛶ 全屏 · 拖动四角缩放
   </div>
   <div class="hint hint-touch">
     滑动屏幕或使用屏幕方向键 · 右上角 ⛶ 可全屏
@@ -221,7 +217,14 @@
   bestEl.textContent = best;
 
   const MAX_SIZE = 760;
-  const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const coarsePointer = window.matchMedia
+    ? window.matchMedia('(pointer: coarse)').matches
+    : ('ontouchstart' in window);
+  const isTouch = coarsePointer
+    || (window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches)
+    || ('ontouchstart' in window)
+    || (navigator.maxTouchPoints || 0) > 0;
+  if (isTouch) document.body.classList.add('touch');
   let size = 0;                        // 画布边长（CSS 像素）
   let maximized = false, sizeBeforeMax = 0, minimized = false, userSized = false;
 
@@ -517,6 +520,7 @@
     tracking = true;
     sx = e.clientX;
     sy = e.clientY;
+    if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointerup', e => {
     if (!tracking) return;
@@ -541,6 +545,30 @@
     else push(0, dy > 0 ? 1 : -1);
   });
   canvas.addEventListener('pointercancel', () => { tracking = false; });
+
+  // 老浏览器没有 Pointer Events 时，用 touch 事件兜底滑动
+  if (!window.PointerEvent) {
+    let txs = 0, tys = 0, trackingTouch = false;
+    canvas.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      trackingTouch = true;
+      txs = t.clientX;
+      tys = t.clientY;
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      if (trackingTouch) e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchend', e => {
+      if (!trackingTouch) return;
+      trackingTouch = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - txs;
+      const dy = t.clientY - tys;
+      if (Math.hypot(dx, dy) < 24) return;
+      if (Math.abs(dx) > Math.abs(dy)) push(dx > 0 ? 1 : -1, 0);
+      else push(0, dy > 0 ? 1 : -1);
+    });
+  }
 
   /* ---------- 窗口控制 ---------- */
   btnPause.addEventListener('click', () => {
@@ -603,7 +631,7 @@
 
   let fsTried = false;
   function autoFullscreen() {
-    if (!isTouch || fsTried || inFullscreen()) return;
+    if (!coarsePointer || fsTried || inFullscreen()) return;
     fsTried = true;
     toggleFullscreen();
   }
